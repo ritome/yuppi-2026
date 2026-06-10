@@ -548,10 +548,7 @@
   // Stage progression: each completed interaction increments `pokes`
   function pokeAdvance() {
     pokes++;
-    if (stage === 1 && pokes >= 2) {
-      stage = 2;
-      goSplit();
-    } else if (stage === 2 && pokes >= 4) {
+    if (stage === 1 && pokes >= 4) {
       stage = 3;
       goConfirm();
     }
@@ -579,51 +576,26 @@
   function dodgeFrom(r, fx, fy) {
     const now = Date.now();
     if (now - lastPokeAt < POKE_COOLDOWN) {
-      // still apply movement, but don't count as stage poke
       if (stage === 1) moveAway(r, fx, fy);
-      else if (stage === 2) runners.forEach(rr => moveAwayRandom(rr));
       return;
     }
     lastPokeAt = now;
     if (stage === 1) {
       moveAway(r, fx, fy);
-      pokeAdvance();
-    } else if (stage === 2) {
-      const lines = [
-        "本物はこっちじゃない",
-        "違うな〜",
-        "ハズレ。次行こ。",
-        "それダミー。",
-        "正解は……まだ秘密。"
+      // playful dodge lines that intensify
+      const dodgeLines = [
+        "ふっ、当たらないよ",
+        "そんなんじゃ捕まらないって",
+        "もっと本気で来てみ？",
       ];
-      showMsg(lines[Math.floor(Math.random() * lines.length)]);
-      runners.forEach(rr => moveAwayRandom(rr));
+      if (pokes < dodgeLines.length) showMsg(dodgeLines[pokes], 1200);
       pokeAdvance();
     }
-  }
-
-  // --- Stage 2: split into 2-3 ---
-  function goSplit() {
-    showMsg("ボタン、増えた。", 1400);
-    const original = runners[0];
-    const count = 2 + Math.floor(Math.random() * 2); // 2 or 3 extras
-    for (let i = 0; i < count; i++) {
-      const clone = document.createElement('button');
-      clone.className = 'runner';
-      clone.textContent = original.textContent;
-      area.appendChild(clone);
-      runners.push(clone);
-      attachRunner(clone);
-    }
-    runners.forEach(rr => moveAwayRandom(rr));
   }
 
   // --- Stage 3: confirm dialog ---
   function goConfirm() {
     showMsg("", 0); stageMsg.classList.remove('show');
-    // remove clones, leave one
-    runners.slice(1).forEach(rr => rr.remove());
-    runners = [runners[0]];
     const r = runners[0];
     centerRunner(r);
     showDialog();
