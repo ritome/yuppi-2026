@@ -344,7 +344,7 @@
 <div id="confirm" role="dialog" aria-modal="true">
   <div class="dialog">
     <h2>本当に1歳増やしますか?</h2>
-    <p>※ この操作は取り消せません</p>
+    <p>※ ボタンを押すと祝福が解禁されます</p>
     <div class="btns">
       <button class="no"  id="confirm-no">いいえ</button>
       <button class="yes" id="confirm-yes">はい</button>
@@ -593,12 +593,18 @@
     }
   }
 
-  // --- Stage 3: confirm dialog ---
+  // --- Stage 3: confirm dialog (with transitional bridge) ---
   function goConfirm() {
-    showMsg("", 0); stageMsg.classList.remove('show');
     const r = runners[0];
     centerRunner(r);
-    showDialog();
+    // bridge: button "gets caught" → ask the consequence question
+    showMsg("捕まえた！…でもその前に、ひとつ確認。", 2400);
+    // freeze the button (it stopped running) but keep it visible as the "caught" object
+    r.style.pointerEvents = 'none';
+    r.style.transition = 'transform .35s ease, opacity .35s ease';
+    r.style.transform = 'scale(.92)';
+    r.style.opacity = '0.65';
+    setTimeout(() => showDialog(), 1200);
   }
 
   function showDialog() {
@@ -630,12 +636,13 @@
   // --- Stage 4: calm, pressable ---
   function goCalm() {
     stage = 4;
-    showMsg("…観念した。ここから本気で祝うよ。", 2400);
+    showMsg("じゃ、約束は約束。", 2200);
     const r = runners[0];
     r.classList.add('calm');
     r.textContent = "🎁 祝福を解禁する";
+    // reset any inline styles left over from "caught" state
+    r.style.transform = '';
     centerRunner(r);
-    // fade the (now restyled) button back in
     r.style.transition = 'opacity .5s ease';
     r.style.pointerEvents = '';
     requestAnimationFrame(() => { r.style.opacity = '1'; });
