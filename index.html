@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>誕生日プロトコル</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #0b0b0f;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  }
+
+  /* === Scene base === */
+  .scene {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity .6s ease;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .scene.active { opacity: 1; pointer-events: auto; }
+
+  /* === Terminal intro === */
+  #intro {
+    background: #000;
+    color: #00ff66;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    padding: 24px;
+    align-items: flex-start;
+    justify-content: flex-start;
+    text-shadow: 0 0 6px rgba(0,255,102,0.4);
+  }
+  #intro::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.18) 3px
+    );
+    pointer-events: none;
+  }
+  #terminal {
+    width: 100%;
+    max-width: 720px;
+    font-size: clamp(14px, 3.6vw, 18px);
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .term-line { display: block; }
+  .cursor {
+    display: inline-block;
+    width: 0.6em; height: 1em;
+    background: #00ff66;
+    vertical-align: -2px;
+    margin-left: 2px;
+    animation: blink 1s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  #tap-hint {
+    position: absolute;
+    left: 24px;
+    bottom: 28px;
+    color: #00ff66;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: clamp(12px, 3.2vw, 14px);
+    opacity: .85;
+    animation: hintBlink 1.1s ease-in-out infinite;
+    text-shadow: 0 0 6px rgba(0,255,102,0.4);
+  }
+  @keyframes hintBlink { 50% { opacity: .25; } }
+
+  /* === Main scene === */
+  #main {
+    background:
+      radial-gradient(ellipse at 20% 10%, #ffd9ec 0%, transparent 55%),
+      radial-gradient(ellipse at 85% 20%, #ffe9a8 0%, transparent 55%),
+      radial-gradient(ellipse at 50% 100%, #bde0fe 0%, transparent 55%),
+      linear-gradient(135deg, #fff7fb 0%, #fff3e0 100%);
+    overflow: hidden;
+  }
+  #main .title {
+    position: absolute;
+    top: 8vh;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    color: #4a3a55;
+    font-weight: 800;
+    font-size: clamp(18px, 4.5vw, 26px);
+    letter-spacing: 0.04em;
+    width: 92%;
+    text-shadow: 0 2px 0 rgba(255,255,255,0.6);
+  }
+  #main .sub {
+    position: absolute;
+    top: calc(8vh + 2.2em);
+    left: 50%;
+    transform: translateX(-50%);
+    color: #8a6a8a;
+    font-size: clamp(12px, 3.2vw, 14px);
+    width: 92%;
+    text-align: center;
+  }
+  #stage-msg {
+    position: absolute;
+    bottom: 10vh;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #5a4665;
+    font-size: clamp(13px, 3.4vw, 16px);
+    width: 92%;
+    max-width: 520px;
+    text-align: center;
+    background: rgba(255,255,255,0.7);
+    border-radius: 14px;
+    padding: 10px 14px;
+    min-height: 1.4em;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    transition: opacity .25s ease;
+  }
+  #stage-msg.show { opacity: 1; }
+
+  .runner {
+    position: absolute;
+    padding: 16px 26px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #ff7ab8 0%, #ff5c8a 100%);
+    color: #fff;
+    font-weight: 700;
+    font-size: clamp(15px, 4.2vw, 18px);
+    border: none;
+    cursor: pointer;
+    box-shadow:
+      0 8px 20px rgba(255,92,138,0.35),
+      inset 0 -3px 0 rgba(0,0,0,0.12),
+      inset 0 2px 0 rgba(255,255,255,0.35);
+    transition: transform .28s cubic-bezier(.2,.9,.3,1.3), background .2s;
+    will-change: transform, left, top;
+    white-space: nowrap;
+    touch-action: manipulation;
+  }
+  .runner:active { transform: scale(0.96); }
+  .runner.calm {
+    background: linear-gradient(135deg, #7ad7ff 0%, #5b9dff 100%);
+    box-shadow:
+      0 10px 26px rgba(91,157,255,0.4),
+      inset 0 -3px 0 rgba(0,0,0,0.12),
+      inset 0 2px 0 rgba(255,255,255,0.35);
+    animation: calmPulse 1.6s ease-in-out infinite;
+  }
+  @keyframes calmPulse {
+    0%,100% { transform: scale(1); }
+    50% { transform: scale(1.04); }
+  }
+
+  /* Confirm dialog */
+  #confirm {
+    position: fixed; inset: 0;
+    background: rgba(20,15,30,0.45);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 30;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+  #confirm.show { display: flex; }
+  .dialog {
+    width: min(86%, 360px);
+    background: #fff;
+    border-radius: 16px;
+    padding: 22px 20px 16px;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.25);
+    text-align: center;
+    color: #2a2333;
+    animation: pop .25s ease;
+  }
+  @keyframes pop {
+    from { transform: scale(.85); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  .dialog h2 {
+    margin: 0 0 6px;
+    font-size: 17px;
+    font-weight: 700;
+  }
+  .dialog p {
+    margin: 0 0 18px;
+    font-size: 13px;
+    color: #6a6276;
+  }
+  .dialog .btns {
+    display: flex;
+    gap: 10px;
+  }
+  .dialog button {
+    flex: 1;
+    padding: 12px 0;
+    border-radius: 10px;
+    border: none;
+    font-weight: 700;
+    font-size: 15px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .dialog .yes { background: #ff5c8a; color: #fff; }
+  .dialog .no  { background: #ececf2; color: #2a2333; }
+
+  /* === Finale === */
+  #finale {
+    background:
+      radial-gradient(ellipse at 50% 0%, #fff3c8 0%, transparent 60%),
+      radial-gradient(ellipse at 50% 100%, #ffd0e3 0%, transparent 60%),
+      linear-gradient(180deg, #fffaf0 0%, #fff0f7 100%);
+    flex-direction: column;
+    text-align: center;
+    padding: 24px;
+  }
+  #finale .hb {
+    font-weight: 900;
+    font-size: clamp(26px, 6vw, 56px);
+    max-width: 96%;
+    color: transparent;
+    background: linear-gradient(135deg, #ff4d8d 0%, #ffb24d 50%, #5bbcff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    line-height: 1.15;
+    letter-spacing: 0.01em;
+    text-shadow: 0 4px 12px rgba(255,77,141,0.15);
+    transform: scale(.6);
+    opacity: 0;
+    transition: transform .8s cubic-bezier(.2,1.2,.3,1.2), opacity .8s ease;
+  }
+  #finale.show .hb { transform: scale(1); opacity: 1; }
+  #finale .term-card {
+    margin-top: 28px;
+    background: #000;
+    color: #00ff66;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    padding: 14px 16px;
+    border-radius: 10px;
+    font-size: clamp(12px, 3.2vw, 14px);
+    max-width: 520px;
+    width: 92%;
+    line-height: 1.7;
+    text-align: left;
+    text-shadow: 0 0 4px rgba(0,255,102,0.4);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity .8s ease .5s, transform .8s ease .5s;
+  }
+  #finale.show .term-card { opacity: 1; transform: translateY(0); }
+
+  /* Closing one-liner — same world as intro */
+  #finale .term-closer {
+    margin-top: 18px;
+    background: #000;
+    color: #00ff66;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: clamp(10px, 2.6vw, 12px);
+    max-width: 520px;
+    width: 92%;
+    line-height: 1.6;
+    text-align: left;
+    text-shadow: 0 0 4px rgba(0,255,102,0.4);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity .7s ease, transform .7s ease;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  #finale .term-closer.show { opacity: .85; transform: translateY(0); }
+  #finale .term-closer .tc-cursor {
+    display: inline-block;
+    width: 0.55em; height: 1em;
+    background: #00ff66;
+    vertical-align: -2px;
+    margin-left: 2px;
+    animation: blink 1s steps(2) infinite;
+  }
+
+  /* Quiet signature */
+  #finale .signature {
+    margin-top: 14px;
+    font-size: clamp(10px, 2.6vw, 11px);
+    color: rgba(90, 70, 101, 0.55);
+    letter-spacing: 0.06em;
+    opacity: 0;
+    transition: opacity 1.4s ease;
+    font-style: italic;
+  }
+  #finale .signature.show { opacity: 1; }
+
+  /* Confetti canvas */
+  #confetti {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  @media (max-width: 380px) {
+    .runner { padding: 14px 20px; }
+    #finale .hb { letter-spacing: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== INTRO ===== -->
+<div id="intro" class="scene active" aria-hidden="false">
+  <div id="terminal">
+    <span class="term-line" id="line1"></span>
+    <span class="term-line" id="line2"></span>
+    <span class="term-line" id="line3"></span><span class="cursor" id="cursor"></span>
+  </div>
+</div>
+
+<!-- ===== MAIN ===== -->
+<div id="main" class="scene" aria-hidden="true">
+  <div class="title">🎂 誕生日のお知らせ 🎂</div>
+  <div class="sub">下のボタンを押してください</div>
+  <div id="runner-area">
+    <button class="runner" id="runner">祝われたい人はここを押す</button>
+  </div>
+  <div id="stage-msg"></div>
+</div>
+
+<!-- ===== CONFIRM ===== -->
+<div id="confirm" role="dialog" aria-modal="true">
+  <div class="dialog">
+    <h2>本当に1歳増やしますか?</h2>
+    <p>※ この操作は取り消せません</p>
+    <div class="btns">
+      <button class="no"  id="confirm-no">いいえ</button>
+      <button class="yes" id="confirm-yes">はい</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FINALE ===== -->
+<div id="finale" class="scene" aria-hidden="true">
+  <div class="hb">HAPPY BIRTHDAY<br>ゆっぴー!</div>
+  <div class="term-card">
+    <span class="term-line">&gt; 祝福システムより:</span>
+    <span class="term-line">&nbsp;&nbsp;対象者ゆっぴーの幸福度、上限突破。</span>
+    <span class="term-line">&nbsp;&nbsp;お誕生日おめでとう🎉</span>
+  </div>
+  <div class="term-closer" id="term-closer"><span id="closer-text"></span><span class="tc-cursor" id="closer-cursor"></span></div>
+  <div class="signature" id="signature">— ゆっぴーへ。from よっしー</div>
+</div>
+
+<canvas id="confetti"></canvas>
+
+<script>
+(() => {
+  // ===========================
+  // INTRO: typewriter
+  // ===========================
+  const intro   = document.getElementById('intro');
+  const main    = document.getElementById('main');
+  const finale  = document.getElementById('finale');
+  const line1   = document.getElementById('line1');
+  const line2   = document.getElementById('line2');
+  const line3   = document.getElementById('line3');
+  const cursor  = document.getElementById('cursor');
+
+  const introLines = [
+    { el: line1, text: "> 誕生日プロトコル起動..." },
+    { el: line2, text: "> 対象者を特定: ゆっぴー" },
+    { el: line3, text: "> 祝福システム、準備完了。" },
+  ];
+
+  let introSkipped = false;
+  let introDone = false;
+
+  async function typeLine(el, text, perChar = 28) {
+    for (let i = 0; i < text.length; i++) {
+      if (introSkipped) {
+        el.textContent = text + "\n";
+        return;
+      }
+      el.textContent += text[i];
+      await sleep(perChar);
+    }
+    el.textContent += "\n";
+  }
+  function sleep(ms) {
+    return new Promise(r => {
+      const id = setTimeout(r, ms);
+      if (introSkipped) { clearTimeout(id); r(); }
+    });
+  }
+
+  let typingDone = false;
+  let tapHint = null;
+
+  async function runIntro() {
+    for (const l of introLines) {
+      await typeLine(l.el, l.text);
+      if (!introSkipped) await sleep(140);
+    }
+    typingDone = true;
+    showTapHint();
+    // do NOT auto-advance — wait for user tap
+  }
+
+  function showTapHint() {
+    if (tapHint || introDone) return;
+    tapHint = document.createElement('div');
+    tapHint.id = 'tap-hint';
+    tapHint.textContent = "> tap to continue_";
+    intro.appendChild(tapHint);
+  }
+
+  function finishIntro() {
+    if (introDone) return;
+    introDone = true;
+    cursor.style.display = 'none';
+    if (tapHint) tapHint.remove();
+    intro.classList.remove('active');
+    intro.setAttribute('aria-hidden', 'true');
+    main.classList.add('active');
+    main.setAttribute('aria-hidden', 'false');
+    placeRunner();
+  }
+
+  function skipIntro() {
+    if (introDone) return;
+    if (!typingDone) {
+      // first tap → finish the typing immediately, then wait for next tap
+      introSkipped = true;
+      introLines.forEach(l => { if (!l.el.textContent.endsWith("\n")) l.el.textContent = l.text + "\n"; });
+      typingDone = true;
+      showTapHint();
+      return;
+    }
+    // typing already done → advance to main
+    finishIntro();
+  }
+
+  const onSkip = (e) => { e.preventDefault(); skipIntro(); };
+  intro.addEventListener('pointerdown', onSkip, { passive: false });
+  intro.addEventListener('click',       onSkip);
+  intro.addEventListener('touchstart',  onSkip, { passive: false });
+  window.addEventListener('keydown',    (e) => { if (!introDone) skipIntro(); });
+
+  // ===========================
+  // MAIN: escaping button
+  // ===========================
+  const area     = document.getElementById('runner-area');
+  const stageMsg = document.getElementById('stage-msg');
+  const confirmEl = document.getElementById('confirm');
+  let stage = 1; // 1: dodge, 2: split, 3: confirm, 4: calm
+  let pokes = 0; // interactions that should advance stage
+  let runners = [];
+  let lastPokeAt = 0;
+  const POKE_COOLDOWN = 220; // ms — prevents PC hover from racing stages
+
+  function showMsg(text, ms = 1600) {
+    stageMsg.textContent = text;
+    stageMsg.classList.add('show');
+    clearTimeout(showMsg._t);
+    if (ms > 0) {
+      showMsg._t = setTimeout(() => stageMsg.classList.remove('show'), ms);
+    }
+  }
+
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+  function placeRunner() {
+    const r = document.getElementById('runner');
+    runners = [r];
+    centerRunner(r);
+    attachRunner(r);
+    showMsg("タップして祝われましょう", 1800);
+  }
+
+  function centerRunner(r) {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    r.style.left = (w/2 - r.offsetWidth/2) + 'px';
+    r.style.top  = (h/2 - r.offsetHeight/2) + 'px';
+  }
+
+  // Move within safe area (avoid header/footer zones)
+  function safeBounds(r) {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const pad = 12;
+    const topPad    = Math.max(120, h * 0.18);
+    const bottomPad = Math.max(110, h * 0.20);
+    return {
+      minX: pad,
+      maxX: w - r.offsetWidth - pad,
+      minY: topPad,
+      maxY: h - r.offsetHeight - bottomPad,
+    };
+  }
+
+  function moveAway(r, fromX, fromY) {
+    const b = safeBounds(r);
+    const rx = r.offsetLeft + r.offsetWidth/2;
+    const ry = r.offsetTop  + r.offsetHeight/2;
+    let dx = rx - fromX;
+    let dy = ry - fromY;
+    const dist = Math.hypot(dx, dy) || 1;
+    dx /= dist; dy /= dist;
+    // jitter the angle a bit so it's not boring
+    const jitter = (Math.random() - 0.5) * 0.9;
+    const c = Math.cos(jitter), s = Math.sin(jitter);
+    const ax = dx * c - dy * s;
+    const ay = dx * s + dy * c;
+    const jump = 140 + Math.random() * 80;
+    let nx = r.offsetLeft + ax * jump;
+    let ny = r.offsetTop  + ay * jump;
+    // if it would leave bounds, mirror it back inside
+    if (nx < b.minX || nx > b.maxX) nx = clamp(b.minX + Math.random() * (b.maxX - b.minX), b.minX, b.maxX);
+    if (ny < b.minY || ny > b.maxY) ny = clamp(b.minY + Math.random() * (b.maxY - b.minY), b.minY, b.maxY);
+    nx = clamp(nx, b.minX, b.maxX);
+    ny = clamp(ny, b.minY, b.maxY);
+    r.style.left = nx + 'px';
+    r.style.top  = ny + 'px';
+  }
+
+  function moveAwayRandom(r) {
+    const b = safeBounds(r);
+    const nx = b.minX + Math.random() * (b.maxX - b.minX);
+    const ny = b.minY + Math.random() * (b.maxY - b.minY);
+    r.style.left = nx + 'px';
+    r.style.top  = ny + 'px';
+  }
+
+  // Stage progression: each completed interaction increments `pokes`
+  function pokeAdvance() {
+    pokes++;
+    if (stage === 1 && pokes >= 2) {
+      stage = 2;
+      goSplit();
+    } else if (stage === 2 && pokes >= 4) {
+      stage = 3;
+      goConfirm();
+    }
+  }
+
+  // --- Stage 1: dodge ---
+  function attachRunner(r) {
+    // Pointer-based dodge (works for mouse hover + touch drag)
+    r.addEventListener('pointerenter', (e) => {
+      if (stage >= 4) return;
+      dodgeFrom(r, e.clientX, e.clientY);
+    });
+    r.addEventListener('pointerdown', (e) => {
+      if (stage >= 4) { triggerFinale(); return; }
+      // Touch tap: dodge then count as poke
+      dodgeFrom(r, e.clientX, e.clientY);
+      e.preventDefault();
+    });
+    r.addEventListener('click', (e) => {
+      if (stage >= 4) { triggerFinale(); return; }
+      e.preventDefault();
+    });
+  }
+
+  function dodgeFrom(r, fx, fy) {
+    const now = Date.now();
+    if (now - lastPokeAt < POKE_COOLDOWN) {
+      // still apply movement, but don't count as stage poke
+      if (stage === 1) moveAway(r, fx, fy);
+      else if (stage === 2) runners.forEach(rr => moveAwayRandom(rr));
+      return;
+    }
+    lastPokeAt = now;
+    if (stage === 1) {
+      moveAway(r, fx, fy);
+      pokeAdvance();
+    } else if (stage === 2) {
+      const lines = [
+        "本物はこっちじゃない",
+        "違うな〜",
+        "ハズレ。次行こ。",
+        "それダミー。",
+        "正解は……まだ秘密。"
+      ];
+      showMsg(lines[Math.floor(Math.random() * lines.length)]);
+      runners.forEach(rr => moveAwayRandom(rr));
+      pokeAdvance();
+    }
+  }
+
+  // --- Stage 2: split into 2-3 ---
+  function goSplit() {
+    showMsg("ボタン、増えた。", 1400);
+    const original = runners[0];
+    const count = 2 + Math.floor(Math.random() * 2); // 2 or 3 extras
+    for (let i = 0; i < count; i++) {
+      const clone = document.createElement('button');
+      clone.className = 'runner';
+      clone.textContent = original.textContent;
+      area.appendChild(clone);
+      runners.push(clone);
+      attachRunner(clone);
+    }
+    runners.forEach(rr => moveAwayRandom(rr));
+  }
+
+  // --- Stage 3: confirm dialog ---
+  function goConfirm() {
+    showMsg("", 0); stageMsg.classList.remove('show');
+    // remove clones, leave one
+    runners.slice(1).forEach(rr => rr.remove());
+    runners = [runners[0]];
+    const r = runners[0];
+    centerRunner(r);
+    showDialog();
+  }
+
+  function showDialog() {
+    confirmEl.classList.add('show');
+  }
+  function hideDialog() {
+    confirmEl.classList.remove('show');
+  }
+
+  document.getElementById('confirm-yes').addEventListener('click', () => {
+    hideDialog();
+    afterConfirm();
+  });
+  document.getElementById('confirm-no').addEventListener('click', () => {
+    hideDialog();
+    afterConfirm();
+  });
+
+  function afterConfirm() {
+    // hide the lingering "祝われたい人はここを押す" button while the message plays
+    if (runners[0]) {
+      runners[0].style.opacity = '0';
+      runners[0].style.pointerEvents = 'none';
+    }
+    showMsg("……どっちでも増えるんだけどね。", 1800);
+    setTimeout(goCalm, 1400);
+  }
+
+  // --- Stage 4: calm, pressable ---
+  function goCalm() {
+    stage = 4;
+    showMsg("…観念した。ここから本気で祝うよ。", 2400);
+    const r = runners[0];
+    r.classList.add('calm');
+    r.textContent = "🎁 祝福を解禁する";
+    centerRunner(r);
+    // fade the (now restyled) button back in
+    r.style.transition = 'opacity .5s ease';
+    r.style.pointerEvents = '';
+    requestAnimationFrame(() => { r.style.opacity = '1'; });
+  }
+
+  // ===========================
+  // FINALE
+  // ===========================
+  let finaleStarted = false;
+  function triggerFinale() {
+    if (finaleStarted) return;
+    finaleStarted = true;
+    main.classList.remove('active');
+    main.setAttribute('aria-hidden', 'true');
+    finale.classList.add('active');
+    finale.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(() => finale.classList.add('show'));
+    startConfetti();
+    runFinaleCloser();
+  }
+
+  async function runFinaleCloser() {
+    await sleep(2400); // wait for confetti + main message to land
+    const closer = document.getElementById('term-closer');
+    const closerText = document.getElementById('closer-text');
+    const closerCursor = document.getElementById('closer-cursor');
+    closer.classList.add('show');
+    await sleep(250);
+    const msg = "> 祝福システム: 全処理完了。ログを保存しました... yuppi_2026.log";
+    for (let i = 0; i < msg.length; i++) {
+      closerText.textContent += msg[i];
+      await sleep(26);
+    }
+    await sleep(800);
+    closerCursor.style.display = 'none';
+    await sleep(600);
+    document.getElementById('signature').classList.add('show');
+  }
+
+  // ===========================
+  // Confetti (canvas)
+  // ===========================
+  const canvas = document.getElementById('confetti');
+  const ctx = canvas.getContext('2d');
+  let dpr = Math.min(window.devicePixelRatio || 1, 2);
+  function resizeCanvas() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width  = Math.floor(window.innerWidth  * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    canvas.style.width  = window.innerWidth  + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  const confettiColors = [
+    '#ff5c8a', '#ffb24d', '#ffe066', '#7ad7ff', '#5b9dff',
+    '#b388ff', '#7ee787', '#ff6b6b', '#ffd166', '#06d6a0'
+  ];
+
+  let particles = [];
+  let confettiActive = false;
+
+  function makeParticle(opts = {}) {
+    const W = window.innerWidth;
+    const size = 6 + Math.random() * 8;          // smaller, more delicate
+    return {
+      x: opts.x ?? Math.random() * W,
+      y: opts.y ?? (-20 - Math.random() * 120),
+      vx: opts.vx ?? (Math.random() - 0.5) * 0.6, // very gentle horizontal drift
+      vy: opts.vy ?? (0.5 + Math.random() * 0.9), // slow terminal-velocity-ish fall
+      w: size,
+      h: size * (0.5 + Math.random() * 0.4),     // slim rectangles flutter best
+      rot: Math.random() * Math.PI * 2,
+      vr: (Math.random() - 0.5) * 0.08,          // slow spin
+      // sway: horizontal sine wave so they drift side-to-side
+      swayAmp: 18 + Math.random() * 36,          // px
+      swayFreq: 0.6 + Math.random() * 1.4,       // Hz
+      swayPhase: Math.random() * Math.PI * 2,
+      // flutter: simulated 3D flip via vertical scale animation
+      flutterFreq: 1.2 + Math.random() * 2.0,
+      flutterPhase: Math.random() * Math.PI * 2,
+      color: confettiColors[Math.floor(Math.random() * confettiColors.length)],
+      shape: Math.random() < 0.18 ? 'circle' : 'rect',
+      baseX: opts.x ?? null,                     // anchor for sway
+      t: 0,
+    };
+  }
+
+  function spawnSprinkle(n, opts = {}) {
+    const W = window.innerWidth;
+    for (let i = 0; i < n; i++) {
+      const p = makeParticle({
+        x: opts.x ?? Math.random() * W,
+        y: opts.y ?? (-20 - Math.random() * 200),
+        ...opts,
+      });
+      p.baseX = p.x;
+      particles.push(p);
+    }
+  }
+
+  // Initial pop: gentle outward poof from screen center, not a heavy clump.
+  function spawnPop(n) {
+    const W = window.innerWidth, H = window.innerHeight;
+    const cx = W / 2, cy = H * 0.42;
+    for (let i = 0; i < n; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 2 + Math.random() * 4;
+      const p = makeParticle({
+        x: cx + (Math.random() - 0.5) * 30,
+        y: cy + (Math.random() - 0.5) * 20,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd - 1.5,           // slight upward bias
+      });
+      p.baseX = p.x;
+      particles.push(p);
+    }
+  }
+
+  function tick(now) {
+    if (!confettiActive) return;
+    const W = window.innerWidth, H = window.innerHeight;
+    ctx.clearRect(0, 0, W, H);
+    const t = (now || performance.now()) / 1000;
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.t += 1/60;
+      // air resistance dampens any initial velocity so they settle into a flutter
+      p.vx *= 0.97;
+      p.vy = Math.min(p.vy + 0.012, 1.6);        // soft gravity, low terminal velocity
+      // base drift
+      p.baseX += p.vx;
+      p.y += p.vy;
+      // horizontal sway (sine wave around baseX)
+      p.x = p.baseX + Math.sin(t * p.swayFreq + p.swayPhase) * p.swayAmp;
+      p.rot += p.vr;
+      if (p.y > H + 30 || p.baseX < -60 || p.baseX > W + 60) {
+        particles.splice(i, 1);
+        continue;
+      }
+      // flutter: 3D-ish flip via scaleY oscillation
+      const flip = Math.cos(t * p.flutterFreq + p.flutterPhase);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.scale(1, flip);                         // makes rectangle appear to flip
+      ctx.fillStyle = p.color;
+      // subtle shading on the "back" side
+      ctx.globalAlpha = 0.65 + 0.35 * Math.abs(flip);
+      if (p.shape === 'rect') {
+        ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, p.w/2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(tick);
+  }
+
+  function startConfetti() {
+    confettiActive = true;
+    // gentle outward poof + immediate sky-fill so the whole screen is alive
+    spawnPop(60);
+    spawnSprinkle(120);                           // already in the sky
+    tick();
+    // steady stream of newcomers from above
+    const rain = setInterval(() => {
+      if (!confettiActive) { clearInterval(rain); return; }
+      spawnSprinkle(6);
+    }, 90);
+    // stop the stream eventually; existing pieces keep fluttering down
+    setTimeout(() => clearInterval(rain), 9000);
+  }
+
+  // ===========================
+  // Reposition on resize
+  // ===========================
+  window.addEventListener('resize', () => {
+    if (stage < 4 && runners.length) {
+      runners.forEach(rr => {
+        const b = safeBounds(rr);
+        rr.style.left = clamp(rr.offsetLeft, b.minX, b.maxX) + 'px';
+        rr.style.top  = clamp(rr.offsetTop,  b.minY, b.maxY) + 'px';
+      });
+    } else if (runners[0]) {
+      centerRunner(runners[0]);
+    }
+  });
+
+  // kick off
+  runIntro();
+})();
+</script>
+</body>
+</html>
